@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-glib = "0.15.12"
-gdk = "0.15.4"
-gtk = "0.15.5"
-gst = { package = "gstreamer", version = "0.18.8" }
-gstreamer-audio = "0.18.7"
-gst_video = { package = "gstreamer-video", version = "0.18.7" }
-gstreamer-app = "0.18.7"
-gstreamer-pbutils = "0.18.7"
+glib = "0.20"
+gtk = { version = "0.9.6", package = "gtk4", features = ["v4_18"] }
+gst = { package = "gstreamer", version = "0.23.6" }
+gstreamer-audio = "0.23.6"
+gst_video = { package = "gstreamer-video", version = "0.23.6" }
+gstreamer-app = "0.23.5"
+gstreamer-pbutils = "0.23.5"
 byte-slice-cast = "1.2.1"
 anyhow = "1.0.65"
-termion = "1.5.6"
+termion = "4"
+dirs = "6.0.0"

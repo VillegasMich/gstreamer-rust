@@ -1,60 +1,64 @@
-use gst::prelude::*;
+use dirs::home_dir;
+use gst::{prelude::*, Element, ElementFactory, Pipeline};
 
-pub fn run(file_path: &str) {
-    gst::init().unwrap();
+const SRC: &str = "filesrc";
+const DECODE: &str = "decodebin";
+const CONVERT: &str = "videoconvert";
+const SINK: &str = "gtk4paintablesink";
 
-    let is_network_stream = file_path.starts_with("http://") || file_path.starts_with("https://");
+pub struct GstreamerManager {
+    pub pipeline: Pipeline,
+    pub src: Element,
+    pub decode: Element,
+    pub convert: Element,
+    pub sink: Element,
+}
 
-    let pipeline = if is_network_stream {
-        gst::parse_launch(&format!(
-            "playbin uri={} video-filter=\"videoconvert ! myfilter\" audio-filter=\"audioconvert ! audioresample\"",
-            file_path
-        ))
-        .unwrap()
-    } else {
-        if !std::path::Path::new(file_path).exists() {
-            eprintln!("Error: File does not exist - {}", file_path);
-            return;
-        }
-        gst::parse_launch(&format!(
-            "filesrc location={} ! decodebin name=dec dec. ! videoconvert ! autovideosink dec. ! audioconvert ! audioresample ! autoaudiosink",
-            file_path
-        ))
-        .unwrap()
-    };
-
-    // ----------------------------------
-    // WEBCAM
-    // let pipeline = gst::parse_launch("v4l2src ! decodebin ! videoconvert ! autovideosink").unwrap();
-    // ----------------------------------
-
-    // Start playing
-    pipeline
-        .set_state(gst::State::Playing)
-        .expect("Unable to set the pipeline to the `Playing` state");
-
-    // Wait until error or EOS
-    let bus = pipeline.bus().unwrap();
-    for msg in bus.iter_timed(gst::ClockTime::NONE) {
-        use gst::MessageView;
-
-        match msg.view() {
-            MessageView::Eos(..) => break,
-            MessageView::Error(err) => {
-                println!(
-                    "Error from {:?}: {} ({:?})",
-                    err.src().map(|s| s.path_string()),
-                    err.error(),
-                    err.debug()
-                );
-                break;
-            }
-            _ => (),
+impl GstreamerManager {
+    pub fn new() -> Self {
+        Self {
+            pipeline: Pipeline::new(),
+            src: ElementFactory::make(SRC)
+                .build()
+                .unwrap_or_else(|_| panic!("Could not create {}", SRC)),
+            decode: ElementFactory::make(DECODE)
+                .build()
+                .unwrap_or_else(|_| panic!("Could not create {}", DECODE)),
+            convert: ElementFactory::make(CONVERT)
+                .build()
+                .unwrap_or_else(|_| panic!("Could not create {}", CONVERT)),
+            sink: ElementFactory::make(SINK)
+                .build()
+                .unwrap_or_else(|_| panic!("Could not create {}", SINK)),
         }
     }
 
-    // Shutdown pipeline
-    pipeline
-        .set_state(gst::State::Null)
-        .expect("Unable to set the pipeline to the `Null` state");
+    pub fn create_pipeline(&mut self, _video_path: &str) {
+        let mut video_path = home_dir().unwrap_or_default();
+        video_path.push("Videos/Recordings/ZooKeeperEC2.mp4");
+        self.src
+            .set_property("location", video_path.to_str().unwrap());
+
+        self.pipeline
+            .add_many([&self.src, &self.decode, &self.convert, &self.sink])
+            .expect("Failed to add elements");
+
+        Element::link_many([&self.src, &self.decode]).expect("Link src → decode failed");
+        Element::link_many([&self.convert, &self.sink]).expect("Link convert → sink failed");
+
+        let convert_clone = self.convert.clone();
+        self.decode.connect_pad_added(move |_dbin, src_pad| {
+            let sink_pad = convert_clone
+                .static_pad("sink")
+                .expect("Failed to get sink pad from videoconvert");
+
+            if sink_pad.is_linked() {
+                return;
+            }
+
+            if let Err(err) = src_pad.link(&sink_pad) {
+                eprintln!("Pad link failed: {err:?}");
+            }
+        });
+    }
 }
