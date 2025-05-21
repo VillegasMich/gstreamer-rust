@@ -14,7 +14,6 @@ pub fn build_ui(app: &Application, video_path: &str) {
         .default_height(720)
         .build();
 
-    // Load CSS file
     let css_provider = gtk::CssProvider::new();
     css_provider.load_from_path("assets/style.css");
     gtk::style_context_add_provider_for_display(
@@ -23,7 +22,6 @@ pub fn build_ui(app: &Application, video_path: &str) {
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    // TODO: Add components styling
     let main_box = gtk::Box::new(Orientation::Vertical, 5);
     let slider_box = gtk::Box::new(Orientation::Horizontal, 5);
     let controls_box = gtk::Box::new(Orientation::Horizontal, 5);
