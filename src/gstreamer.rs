@@ -1,4 +1,3 @@
-use dirs::home_dir;
 use gst::{prelude::*, Element, ElementFactory, Pipeline};
 
 const SRC: &str = "filesrc";
@@ -33,11 +32,10 @@ impl GstreamerManager {
         }
     }
 
-    pub fn create_pipeline(&mut self, _video_path: &str) {
-        let mut video_path = home_dir().unwrap_or_default();
-        video_path.push("Videos/Recordings/ZooKeeperEC2.mp4");
+    // TODO: Add audio
+    pub fn create_pipeline(&mut self, video_path: &str) {
         self.src
-            .set_property("location", video_path.to_str().unwrap());
+            .set_property("location", video_path);
 
         self.pipeline
             .add_many([&self.src, &self.decode, &self.convert, &self.sink])

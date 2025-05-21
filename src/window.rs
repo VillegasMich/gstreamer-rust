@@ -4,17 +4,22 @@ use gtk::{prelude::*, Application, ApplicationWindow, Button, Orientation};
 
 use crate::gstreamer::GstreamerManager;
 
-pub fn build_ui(app: &Application, _video_path: &str) {
+pub fn build_ui(app: &Application, video_path: &str) {
     let window = ApplicationWindow::builder()
         .application(app)
         .title("Mini video player GStreamer + GTK4")
-        .default_width(800)
-        .default_height(600)
+        .default_width(1280)
+        .default_height(720)
         .build();
 
+    // TODO: Add components styling
     let main_box = gtk::Box::new(Orientation::Vertical, 5);
     let controls_box = gtk::Box::new(Orientation::Horizontal, 5);
     let picture = gtk::Picture::new();
+    picture.set_margin_start(10);
+    picture.set_margin_top(10);
+    picture.set_margin_bottom(10);
+    picture.set_margin_end(10);
     main_box.append(&picture);
 
     let play_button = Button::with_label("▶ Play");
@@ -31,7 +36,7 @@ pub fn build_ui(app: &Application, _video_path: &str) {
     window.present();
 
     let mut gst_manager = GstreamerManager::new();
-    gst_manager.create_pipeline("");
+    gst_manager.create_pipeline(video_path);
 
     // BUG: do this to show video screen
     gst_manager.pipeline.set_state(gst::State::Paused).unwrap();
@@ -69,6 +74,7 @@ pub fn build_ui(app: &Application, _video_path: &str) {
 
     let pipeline_clone = gst_manager.pipeline.clone();
 
+    // BUG: CTRL+q closes the video not the app
     // Close
     window.connect_close_request(move |_| {
         pipeline_clone.set_state(gst::State::Null).ok();
