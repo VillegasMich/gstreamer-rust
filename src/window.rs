@@ -6,144 +6,209 @@ use gtk::{prelude::*, Application, ApplicationWindow, Button, Orientation};
 
 use crate::gstreamer::GstreamerManager;
 
-pub fn build_ui(app: &Application, video_path: &str) {
-    let window = ApplicationWindow::builder()
-        .application(app)
-        .title("Mini video player GStreamer + GTK4")
-        .default_width(1280)
-        .default_height(720)
-        .build();
+pub struct WindowManager {
+    title: String,
+    default_width: i32,
+    default_height: i32,
+    video_path: String,
+    css_path: String,
+}
 
-    let css_provider = gtk::CssProvider::new();
-    css_provider.load_from_path("assets/style.css");
-    gtk::style_context_add_provider_for_display(
-        &gtk::gdk::Display::default().expect("Could not connect to a display."),
-        &css_provider,
-        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-    );
-
-    let main_box = gtk::Box::new(Orientation::Vertical, 5);
-    let slider_box = gtk::Box::new(Orientation::Horizontal, 5);
-    let controls_box = gtk::Box::new(Orientation::Horizontal, 5);
-    let picture = gtk::Picture::new();
-    picture.set_halign(gtk::Align::Center);
-    main_box.append(&picture);
-
-    let play_button = Button::with_label("▶ Play");
-    play_button.set_valign(gtk::Align::Center);
-    let pause_button = Button::with_label("⏸ Pause");
-    pause_button.set_valign(gtk::Align::Center);
-    let stop_button = Button::with_label("⏹ Stop");
-    stop_button.set_valign(gtk::Align::Center);
-
-    controls_box.append(&play_button);
-    controls_box.append(&pause_button);
-    controls_box.append(&stop_button);
-
-    let progress_slider = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 100.0, 1.0);
-    progress_slider.set_hexpand(true);
-    progress_slider.set_valign(gtk::Align::Center);
-
-    let playtime_label = gtk::Label::new(None);
-    playtime_label.set_halign(gtk::Align::End);
-    playtime_label.set_valign(gtk::Align::Center);
-
-    slider_box.append(&playtime_label);
-    slider_box.append(&progress_slider);
-    main_box.append(&slider_box);
-
-    controls_box.set_halign(gtk::Align::Center);
-    main_box.append(&controls_box);
-
-    window.set_child(Some(&main_box));
-    window.present();
-
-    let mut gst_manager = GstreamerManager::new();
-    gst_manager.create_pipeline(video_path);
-
-    // BUG: do this to show video screen
-    gst_manager.pipeline.set_state(gst::State::Paused).unwrap();
-    gst_manager.pipeline.set_state(gst::State::Playing).unwrap();
-
-    let paintable = gst_manager.sink.property::<glib::Object>("paintable");
-    picture.set_paintable(Some(&paintable.downcast::<gtk::gdk::Paintable>().unwrap()));
-
-    // Slider
-    let pipeline_clone = gst_manager.pipeline.clone();
-    let progress_slider_clone = progress_slider.clone();
-
-    glib::timeout_add_local(Duration::from_millis(50), move || {
-        if let (Some(position), Some(duration)) = (
-            pipeline_clone.query_position::<gst::ClockTime>(),
-            pipeline_clone.query_duration::<gst::ClockTime>(),
-        ) {
-            let pos_ns = position.nseconds();
-            let dur_ns = duration.nseconds();
-
-            let pos_secs = pos_ns as f64 / 1_000_000_000.0;
-            let dur_secs = dur_ns as f64 / 1_000_000_000.0;
-
-            progress_slider_clone.set_range(0.0, dur_secs);
-            progress_slider_clone.set_value(pos_secs);
+impl WindowManager {
+    pub fn new(
+        title: String,
+        default_width: i32,
+        default_height: i32,
+        video_path: String,
+        css_path: String,
+    ) -> Self {
+        Self {
+            title,
+            default_width,
+            default_height,
+            video_path,
+            css_path,
         }
+    }
 
-        glib::ControlFlow::Continue
-    });
+    pub fn build(&self, app: &Application) {
+        self.load_css();
+        let window = self.build_window(app);
+        window.present();
+    }
 
-    // Playtime
-    let pipeline_clone = gst_manager.pipeline.clone();
-    let playtime_label_clone = playtime_label.clone();
+    fn build_window(&self, app: &Application) -> ApplicationWindow {
+        let window = ApplicationWindow::builder()
+            .application(app)
+            .title(&self.title)
+            .default_width(self.default_width)
+            .default_height(self.default_height)
+            .build();
 
-    glib::timeout_add_local(Duration::from_millis(50), move || {
-        if let (Some(position), Some(duration)) = (
-            pipeline_clone.query_position::<gst::ClockTime>(),
-            pipeline_clone.query_duration::<gst::ClockTime>(),
-        ) {
-            let pos_secs = position.seconds();
-            let dur_secs = duration.seconds();
+        let main_box = gtk::Box::new(Orientation::Vertical, 5);
+        let slider_box = gtk::Box::new(Orientation::Horizontal, 5);
+        let controls_box = gtk::Box::new(Orientation::Horizontal, 5);
+        let picture = gtk::Picture::new();
+        picture.set_halign(gtk::Align::Center);
+        main_box.append(&picture);
 
-            let format_time = |t: u64| format!("{:02}:{:02}", t / 60, t % 60);
-            let text = format!("{} / {}", format_time(pos_secs), format_time(dur_secs));
+        let play_button = Button::with_label("▶ Play");
+        play_button.set_valign(gtk::Align::Center);
+        let pause_button = Button::with_label("⏸ Pause");
+        pause_button.set_valign(gtk::Align::Center);
+        let stop_button = Button::with_label("⏹ Stop");
+        stop_button.set_valign(gtk::Align::Center);
 
-            playtime_label_clone.set_text(&text);
-        }
+        controls_box.append(&play_button);
+        controls_box.append(&pause_button);
+        controls_box.append(&stop_button);
 
-        glib::ControlFlow::Continue
-    });
+        let progress_slider = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 100.0, 1.0);
+        progress_slider.set_hexpand(true);
+        progress_slider.set_valign(gtk::Align::Center);
 
-    // Play
-    let pipeline_clone = gst_manager.pipeline.clone();
+        let playtime_label = gtk::Label::new(None);
+        playtime_label.set_halign(gtk::Align::End);
+        playtime_label.set_valign(gtk::Align::Center);
 
-    play_button.connect_clicked(move |_| {
-        pipeline_clone
-            .set_state(gst::State::Playing)
-            .expect("Failed play button");
-    });
+        slider_box.append(&playtime_label);
+        slider_box.append(&progress_slider);
+        main_box.append(&slider_box);
 
-    // Pause
-    let pipeline_clone = gst_manager.pipeline.clone();
+        controls_box.set_halign(gtk::Align::Center);
+        main_box.append(&controls_box);
 
-    pause_button.connect_clicked(move |_| {
-        pipeline_clone
-            .set_state(gst::State::Paused)
-            .expect("Failed pause button");
-    });
+        window.set_child(Some(&main_box));
 
-    // Stop
-    let pipeline_clone = gst_manager.pipeline.clone();
+        let gst_manager = self.load_gstreamer(picture);
 
-    stop_button.connect_clicked(move |_| {
-        pipeline_clone
-            .set_state(gst::State::Ready)
-            .expect("Failed stop button");
-    });
+        // Slider
+        self.load_slider_movement(progress_slider, &gst_manager);
 
-    // BUG: CTRL+q closes the video not the app
-    // Close
-    let pipeline_clone = gst_manager.pipeline.clone();
+        // Playtime
+        self.load_playtime_indicator(playtime_label, &gst_manager);
 
-    window.connect_close_request(move |_| {
-        pipeline_clone.set_state(gst::State::Null).ok();
-        glib::Propagation::Stop
-    });
+        // Play button
+        self.load_play_button_logic(play_button, &gst_manager);
+
+        // Pause button
+        self.load_pause_button_logic(pause_button, &gst_manager);
+
+        // Stop button
+        self.load_stop_button_logic(stop_button, &gst_manager);
+
+        // Close
+        self.load_close_logic(&window, &gst_manager);
+
+        window
+    }
+
+    fn load_css(&self) {
+        let css_provider = gtk::CssProvider::new();
+        css_provider.load_from_path(&self.css_path);
+        gtk::style_context_add_provider_for_display(
+            &gtk::gdk::Display::default().expect("Could not connect to a display."),
+            &css_provider,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+
+    fn load_gstreamer(&self, picture: gtk::Picture) -> GstreamerManager {
+        let mut gst_manager = GstreamerManager::new();
+        gst_manager.create_pipeline(&self.video_path);
+
+        // BUG: do this to show video screen
+        gst_manager.pipeline.set_state(gst::State::Paused).unwrap();
+        gst_manager.pipeline.set_state(gst::State::Playing).unwrap();
+
+        let paintable = gst_manager.sink.property::<glib::Object>("paintable");
+        picture.set_paintable(Some(&paintable.downcast::<gtk::gdk::Paintable>().unwrap()));
+        gst_manager
+    }
+
+    fn load_slider_movement(&self, progress_slider: gtk::Scale, gst_manager: &GstreamerManager) {
+        let pipeline_clone = gst_manager.pipeline.clone();
+        let progress_slider_clone = progress_slider.clone();
+
+        glib::timeout_add_local(Duration::from_millis(50), move || {
+            if let (Some(position), Some(duration)) = (
+                pipeline_clone.query_position::<gst::ClockTime>(),
+                pipeline_clone.query_duration::<gst::ClockTime>(),
+            ) {
+                let pos_ns = position.nseconds();
+                let dur_ns = duration.nseconds();
+
+                let pos_secs = pos_ns as f64 / 1_000_000_000.0;
+                let dur_secs = dur_ns as f64 / 1_000_000_000.0;
+
+                progress_slider_clone.set_range(0.0, dur_secs);
+                progress_slider_clone.set_value(pos_secs);
+            }
+
+            glib::ControlFlow::Continue
+        });
+    }
+
+    fn load_playtime_indicator(&self, playtime_label: gtk::Label, gst_manager: &GstreamerManager) {
+        let pipeline_clone = gst_manager.pipeline.clone();
+        let playtime_label_clone = playtime_label.clone();
+
+        glib::timeout_add_local(Duration::from_millis(50), move || {
+            if let (Some(position), Some(duration)) = (
+                pipeline_clone.query_position::<gst::ClockTime>(),
+                pipeline_clone.query_duration::<gst::ClockTime>(),
+            ) {
+                let pos_secs = position.seconds();
+                let dur_secs = duration.seconds();
+
+                let format_time = |t: u64| format!("{:02}:{:02}", t / 60, t % 60);
+                let text = format!("{} / {}", format_time(pos_secs), format_time(dur_secs));
+
+                playtime_label_clone.set_text(&text);
+            }
+
+            glib::ControlFlow::Continue
+        });
+    }
+
+    fn load_play_button_logic(&self, play_button: gtk::Button, gst_manager: &GstreamerManager) {
+        let pipeline_clone = gst_manager.pipeline.clone();
+
+        play_button.connect_clicked(move |_| {
+            pipeline_clone
+                .set_state(gst::State::Playing)
+                .expect("Failed play button");
+        });
+    }
+
+    fn load_pause_button_logic(&self, pause_button: gtk::Button, gst_manager: &GstreamerManager) {
+        let pipeline_clone = gst_manager.pipeline.clone();
+
+        pause_button.connect_clicked(move |_| {
+            pipeline_clone
+                .set_state(gst::State::Paused)
+                .expect("Failed pause button");
+        });
+    }
+
+    fn load_stop_button_logic(&self, stop_button: gtk::Button, gst_manager: &GstreamerManager) {
+        let pipeline_clone = gst_manager.pipeline.clone();
+
+        stop_button.connect_clicked(move |_| {
+            pipeline_clone
+                .set_state(gst::State::Ready)
+                .expect("Failed stop button");
+        });
+    }
+
+    fn load_close_logic(&self, window: &ApplicationWindow, gst_manager: &GstreamerManager) {
+        // BUG: CTRL+q closes the video not the app
+        // Close
+        let pipeline_clone = gst_manager.pipeline.clone();
+
+        window.connect_close_request(move |_| {
+            pipeline_clone.set_state(gst::State::Null).ok();
+            glib::Propagation::Stop
+        });
+    }
 }
