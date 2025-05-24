@@ -5,6 +5,14 @@ window {
   background-color: #ffffff;
 }
 
+picture {
+  border-radius: 5px;
+}
+
+image {
+  color: #ffffff;
+}
+
 /* Style the main vertical box */
 box.vertical {
   padding: 10px;
@@ -18,9 +26,8 @@ box.horizontal {
 
 /* Style the buttons */
 button {
-  margin: 5px;
-  padding: 8px 15px;
   border-radius: 5px;
+  align-items: center;
 }
 
 button:hover {

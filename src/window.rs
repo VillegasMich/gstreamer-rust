@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 use gst::prelude::ElementExt;
 use gst_video::prelude::*;
@@ -48,20 +48,35 @@ impl WindowManager {
         let main_box = gtk::Box::new(Orientation::Vertical, 5);
         let slider_box = gtk::Box::new(Orientation::Horizontal, 5);
         let controls_box = gtk::Box::new(Orientation::Horizontal, 5);
+
         let picture = gtk::Picture::new();
         picture.set_halign(gtk::Align::Center);
-        main_box.append(&picture);
+
+        let pause_image = gtk::Image::from_icon_name("media-playback-pause-symbolic");
+        pause_image.set_valign(gtk::Align::Center);
+        pause_image.set_halign(gtk::Align::Center);
+        pause_image.set_pixel_size(64);
+        pause_image.set_visible(false);
+
+        let overlay = gtk::Overlay::new();
+        overlay.set_child(Some(&picture));
+        overlay.add_overlay(&pause_image);
+
+        main_box.append(&overlay);
 
         let play_button = Button::with_label("▶ Play");
         play_button.set_valign(gtk::Align::Center);
-        let pause_button = Button::with_label("⏸ Pause");
+        let pause_button = Button::with_label("⏸  Pause");
         pause_button.set_valign(gtk::Align::Center);
-        let stop_button = Button::with_label("⏹ Stop");
+        let stop_button = Button::with_label("⏹  Stop");
         stop_button.set_valign(gtk::Align::Center);
+        let volume_toggle = Button::with_label(" ");
+        volume_toggle.set_valign(gtk::Align::Center);
 
         controls_box.append(&play_button);
         controls_box.append(&pause_button);
         controls_box.append(&stop_button);
+        controls_box.append(&volume_toggle);
 
         let progress_slider = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 100.0, 1.0);
         progress_slider.set_hexpand(true);
@@ -89,13 +104,16 @@ impl WindowManager {
         self.load_playtime_indicator(playtime_label, &gst_manager);
 
         // Play button
-        self.load_play_button_logic(play_button, &gst_manager);
+        self.load_play_button_logic(pause_image.clone(), play_button, &gst_manager);
 
         // Pause button
-        self.load_pause_button_logic(pause_button, &gst_manager);
+        self.load_pause_button_logic(pause_image.clone(), pause_button, &gst_manager);
 
         // Stop button
         self.load_stop_button_logic(stop_button, &gst_manager);
+
+        // Volume Toggle
+        self.load_volume_button_logic(volume_toggle, &gst_manager);
 
         // Close
         self.load_close_logic(&window, &gst_manager);
@@ -117,11 +135,15 @@ impl WindowManager {
         let mut gst_manager = GstreamerManager::new();
         gst_manager.create_pipeline(&self.video_path);
 
+        // Print pipeline properties and elements
+        gst_manager.print_pipeline_properties();
+        gst_manager.list_elements();
+
         // BUG: do this to show video screen
         gst_manager.pipeline.set_state(gst::State::Paused).unwrap();
         gst_manager.pipeline.set_state(gst::State::Playing).unwrap();
 
-        let paintable = gst_manager.sink.property::<glib::Object>("paintable");
+        let paintable = gst_manager.video_sink.property::<glib::Object>("paintable");
         picture.set_paintable(Some(&paintable.downcast::<gtk::gdk::Paintable>().unwrap()));
         gst_manager
     }
@@ -171,23 +193,35 @@ impl WindowManager {
         });
     }
 
-    fn load_play_button_logic(&self, play_button: gtk::Button, gst_manager: &GstreamerManager) {
+    fn load_play_button_logic(
+        &self,
+        pause_image: gtk::Image,
+        play_button: gtk::Button,
+        gst_manager: &GstreamerManager,
+    ) {
         let pipeline_clone = gst_manager.pipeline.clone();
 
         play_button.connect_clicked(move |_| {
             pipeline_clone
                 .set_state(gst::State::Playing)
                 .expect("Failed play button");
+            pause_image.set_visible(false);
         });
     }
 
-    fn load_pause_button_logic(&self, pause_button: gtk::Button, gst_manager: &GstreamerManager) {
+    fn load_pause_button_logic(
+        &self,
+        pause_image: gtk::Image,
+        pause_button: gtk::Button,
+        gst_manager: &GstreamerManager,
+    ) {
         let pipeline_clone = gst_manager.pipeline.clone();
 
         pause_button.connect_clicked(move |_| {
             pipeline_clone
                 .set_state(gst::State::Paused)
                 .expect("Failed pause button");
+            pause_image.set_visible(true);
         });
     }
 
@@ -201,14 +235,32 @@ impl WindowManager {
         });
     }
 
+    fn load_volume_button_logic(&self, volume_toggle: gtk::Button, gst_manager: &GstreamerManager) {
+        // TODO: Insted of toggle add a slider
+        let volume_element = gst_manager
+            .pipeline
+            .clone()
+            .by_name("volume0")
+            .expect("Volume element not found");
+
+        let is_muted = Rc::new(Cell::new(false));
+        let is_muted_clone = is_muted.clone();
+
+        volume_toggle.connect_clicked(move |volume_toggle| {
+            let current_mute = is_muted_clone.get();
+            let new_volume: f64 = if current_mute { 1.0 } else { 0.0 };
+            volume_element.set_property("volume", new_volume);
+            volume_toggle.set_label(if current_mute { " " } else { " " });
+            is_muted_clone.set(!current_mute);
+        });
+    }
+
     fn load_close_logic(&self, window: &ApplicationWindow, gst_manager: &GstreamerManager) {
-        // BUG: CTRL+q closes the video not the app
-        // Close
         let pipeline_clone = gst_manager.pipeline.clone();
 
         window.connect_close_request(move |_| {
             pipeline_clone.set_state(gst::State::Null).ok();
-            glib::Propagation::Stop
+            glib::Propagation::Proceed
         });
     }
 }
