@@ -6,6 +6,9 @@ A modern **photobooth-style GTK4 application** written in **Rust**. This app all
 
 ## 🎥 Video
 
+https://github.com/user-attachments/assets/387b4564-1bab-4915-a87a-924e6f41b781
+
+
 ## ✨ Features
 
 - 🎥 Video playback with `Play`, `Pause`, and `Stop` controls.
