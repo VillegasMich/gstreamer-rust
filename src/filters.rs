@@ -8,10 +8,8 @@ pub const FILTER_NAMES: &[&str] = &[
     "shagadelictv",
     "revtv",
     "quarktv",
-    "cartoon",
     "twirl",
     "kaleidoscope",
-    "lenscorrection",
     "tunnel",
     "frei0r-scanline0r",
 ];

@@ -6,7 +6,7 @@ use std::{
 
 use gst::prelude::ElementExt;
 use gst_video::prelude::*;
-use gtk::{prelude::*, Application, ApplicationWindow, Button, Orientation};
+use gtk::{prelude::*, Application, ApplicationWindow, Button, Orientation, Window};
 
 use crate::{
     filters::{FILTER_NAMES, NO_FILTER},
@@ -19,6 +19,8 @@ pub struct WindowManager {
     default_height: i32,
     video_path: String,
     css_path: String,
+    is_dragging: Rc<Cell<bool>>,
+    video_info_window: Rc<RefCell<Option<gtk::Window>>>,
 }
 
 impl WindowManager {
@@ -35,6 +37,8 @@ impl WindowManager {
             default_height,
             video_path,
             css_path,
+            is_dragging: Rc::new(Cell::new(false)),
+            video_info_window: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -88,17 +92,21 @@ impl WindowManager {
         stop_button.set_valign(gtk::Align::Center);
         let volume_toggle = Button::with_label(" ");
         volume_toggle.set_valign(gtk::Align::Center);
+        let metadata_toggle = Button::with_label("Video Info");
+        metadata_toggle.set_valign(gtk::Align::Center);
 
         controls_box.append(&play_button);
         controls_box.append(&pause_button);
         controls_box.append(&stop_button);
         controls_box.append(&volume_toggle);
+        controls_box.append(&metadata_toggle);
 
         let progress_slider = gtk::Scale::with_range(Orientation::Horizontal, 0.0, 100.0, 1.0);
         progress_slider.set_hexpand(true);
         progress_slider.set_valign(gtk::Align::Center);
 
         let playtime_label = gtk::Label::new(None);
+        playtime_label.set_css_classes(&["time"]);
         playtime_label.set_halign(gtk::Align::End);
         playtime_label.set_valign(gtk::Align::Center);
 
@@ -114,7 +122,8 @@ impl WindowManager {
         let gst_manager = self.load_gstreamer(picture);
 
         // Slider
-        self.load_slider_movement(progress_slider, &gst_manager);
+        self.load_slider_movement(progress_slider.clone(), &gst_manager);
+        self.load_slider_interaction(progress_slider, &gst_manager);
 
         // Playtime
         self.load_playtime_indicator(playtime_label, &gst_manager);
@@ -130,6 +139,9 @@ impl WindowManager {
 
         // Volume Toggle
         self.load_volume_button_logic(volume_toggle, &gst_manager);
+
+        // Metedata Togle
+        self.load_video_info_button_logic(&window, metadata_toggle);
 
         // Filter Selector
         self.load_filter_selector_logic(
@@ -168,6 +180,33 @@ impl WindowManager {
         let paintable = gst_manager.video_sink.property::<glib::Object>("paintable");
         picture.set_paintable(Some(&paintable.downcast::<gtk::gdk::Paintable>().unwrap()));
         gst_manager
+    }
+
+    fn load_slider_interaction(&self, progress_slider: gtk::Scale, gst_manager: &GstreamerManager) {
+        let pipeline_clone = gst_manager.pipeline.clone();
+        let is_dragging_clone = self.is_dragging.clone(); // Clone for the gesture handlers
+        let progress_slider_clone = progress_slider.clone(); // Clone for the drag-end closure
+
+        let gesture = gtk::GestureDrag::new();
+        progress_slider.add_controller(gesture.clone());
+
+        gesture.connect_drag_begin(move |_, _, _| {
+            is_dragging_clone.set(true);
+        });
+
+        let pipeline_seek_clone = pipeline_clone.clone();
+        let is_dragging_end_clone = self.is_dragging.clone();
+        gesture.connect_drag_end(move |_, _, _| {
+            is_dragging_end_clone.set(false);
+
+            let seek_secs = progress_slider_clone.value();
+            let seek_ns = (seek_secs * 1_000_000_000.0) as u64;
+            let position = gst::ClockTime::from_nseconds(seek_ns);
+
+            pipeline_seek_clone
+                .seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::KEY_UNIT, position)
+                .expect("Failed to seek");
+        });
     }
 
     fn load_slider_movement(&self, progress_slider: gtk::Scale, gst_manager: &GstreamerManager) {
@@ -248,6 +287,7 @@ impl WindowManager {
     }
 
     fn load_stop_button_logic(&self, stop_button: gtk::Button, gst_manager: &GstreamerManager) {
+        // TODO: Set the picture (video) to something default
         let pipeline_clone = gst_manager.pipeline.clone();
 
         stop_button.connect_clicked(move |_| {
@@ -301,6 +341,35 @@ impl WindowManager {
                             .set_filter_and_add_to_pipeline(&text);
                     }
                 }
+            }
+        });
+    }
+
+    fn load_video_info_button_logic(
+        &self,
+        main_window: &ApplicationWindow,
+        metadata_toggle: gtk::Button,
+    ) {
+        // TODO: Add video metadata info
+        let main_window_clone = main_window.clone();
+        let video_info_window_clone = self.video_info_window.clone();
+
+        metadata_toggle.connect_clicked(move |_| {
+            let mut video_info_window_borrow = video_info_window_clone.borrow_mut();
+            if video_info_window_borrow.is_none() {
+                let float_window = Window::builder()
+                    .title("Video Info")
+                    .default_width(200)
+                    .default_height(100)
+                    .transient_for(&main_window_clone)
+                    .modal(false)
+                    .resizable(false)
+                    .build();
+
+                float_window.set_visible(true);
+                *video_info_window_borrow = Some(float_window);
+            } else if let Some(float_window) = &*video_info_window_borrow {
+                float_window.present();
             }
         });
     }

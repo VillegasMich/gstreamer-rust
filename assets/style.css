@@ -1,38 +1,75 @@
-/* Basic styling for the video player */
-
-/* Style the main window */
+/* Window background */
 window {
-  background-color: #ffffff;
+  background-color: rgba(245, 245, 245, 0.95);
 }
 
-picture {
-  border-radius: 5px;
-}
-
-image {
-  color: #ffffff;
-}
-
-/* Style the main vertical box */
+/* Main layout padding */
 box.vertical {
-  padding: 10px;
+  padding: 16px;
 }
 
-/* Style the horizontal controls box */
+/* Video frame (gtk::Picture) */
+picture {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #ddd;
+}
+
+/* Time or icons over the video */
+image {
+  color: rgba(0, 0, 0, 0.7); /* Consider switching to white for dark themes */
+}
+
+/* Horizontal control bar */
 box.horizontal {
-  margin-top: 10px;
-  margin-bottom: 10px;
+  margin-top: 5px;
+  margin-bottom: 5px;
 }
 
-/* Style the buttons */
+/* Playback buttons */
 button {
-  border-radius: 5px;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background-color: #eaeaea;
+  color: #333;
+  transition: background-color 0.2s ease;
 }
 
 button:hover {
-  background-color: #888a85;
+  background-color: #d0d0d0;
 }
 
 button:active {
-  background-color: #b2b2b2;
+  background-color: #b8b8b8;
+}
+
+/* Filter dropdown */
+.filter-selector {
+  border-radius: 8px;
+  padding: 6px 10px;
+  background-color: #ffffff;
+  border: 1px solid #ccc;
+  color: #333;
+  transition: border-color 0.2s ease;
+}
+
+.filter-selector:hover {
+  border-color: #888a85;
+}
+
+/* Slider styling (for time bar) */
+scale slider {
+  background-color: #007acc;
+}
+
+scale trough {
+  border-radius: 4px;
+  background-color: #e0e0e0;
+}
+
+/* Time label */
+label.time {
+  font-family: monospace;
+  color: #000000;
+  margin: 0 8px;
 }
