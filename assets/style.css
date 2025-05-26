@@ -27,7 +27,6 @@ box.horizontal {
 /* Style the buttons */
 button {
   border-radius: 5px;
-  align-items: center;
 }
 
 button:hover {

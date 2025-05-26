@@ -8,6 +8,7 @@ const AUDIO_CONVERT: &str = "audioconvert";
 const AUDIO_SINK: &str = "autoaudiosink";
 const VOLUME: &str = "volume";
 
+#[derive(Clone)]
 pub struct GstreamerManager {
     pub pipeline: Pipeline,
     pub src: Element,
@@ -17,6 +18,7 @@ pub struct GstreamerManager {
     pub audio_convert: Element,
     pub audio_sink: Element,
     pub volume: Element,
+    pub filter: Option<Element>,
 }
 
 impl GstreamerManager {
@@ -44,6 +46,7 @@ impl GstreamerManager {
             volume: ElementFactory::make(VOLUME)
                 .build()
                 .unwrap_or_else(|_| panic!("Could not create {}", VOLUME)),
+            filter: None,
         }
     }
 
@@ -110,15 +113,67 @@ impl GstreamerManager {
         });
     }
 
+    pub fn remove_filer_and_continue_pipeline(&mut self) {
+        if let Some(old_filter) = self.filter.take() {
+            old_filter
+                .set_state(gst::State::Null)
+                .expect("Failed to set old filter to NULL");
+
+            self.pipeline
+                .remove(&old_filter)
+                .expect("Failed to remove old filter");
+        }
+        if let Err(err) = Element::link_many([&self.vide_convert, &self.video_sink]) {
+            eprintln!("Failed to relink filter into pipeline: {err:?}");
+        } else {
+            println!("Filter removed successfully");
+            self.filter = None;
+        }
+    }
+
+    pub fn set_filter_and_add_to_pipeline(&mut self, filter_name: &str) {
+        if let Some(old_filter) = self.filter.take() {
+            old_filter
+                .set_state(gst::State::Null)
+                .expect("Failed to set old filter to NULL");
+
+            self.pipeline
+                .remove(&old_filter)
+                .expect("Failed to remove old filter");
+        }
+
+        let new_filter_element = ElementFactory::make(filter_name)
+            .build()
+            .unwrap_or_else(|_| panic!("Could not create {}", filter_name));
+
+        self.pipeline
+            .add(&new_filter_element)
+            .expect("Error adding filter to pipeline");
+        new_filter_element
+            .sync_state_with_parent()
+            .expect("Failed to sync filter state");
+
+        self.vide_convert.unlink(&self.video_sink);
+
+        if let Err(err) =
+            Element::link_many([&self.vide_convert, &new_filter_element, &self.video_sink])
+        {
+            eprintln!("Failed to relink filter into pipeline: {err:?}");
+        } else {
+            println!("Filter '{}' inserted into pipeline", filter_name);
+            self.filter = Some(new_filter_element);
+        }
+    }
+
     pub fn print_pipeline_properties(&self) {
-        println!("Pipeline properties:");
+        println!("\nPipeline properties:");
         for prop in self.pipeline.list_properties() {
             println!("- {}", prop.name());
         }
     }
 
     pub fn list_elements(&self) {
-        println!("Pipeline elements:");
+        println!("\nPipeline elements:");
         for element in self.pipeline.iterate_elements() {
             println!("- {}", element.unwrap().name());
         }

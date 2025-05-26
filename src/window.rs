@@ -1,10 +1,17 @@
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    time::Duration,
+};
 
 use gst::prelude::ElementExt;
 use gst_video::prelude::*;
 use gtk::{prelude::*, Application, ApplicationWindow, Button, Orientation};
 
-use crate::gstreamer::GstreamerManager;
+use crate::{
+    filters::{FILTER_NAMES, NO_FILTER},
+    gstreamer::GstreamerManager,
+};
 
 pub struct WindowManager {
     title: String,
@@ -48,6 +55,15 @@ impl WindowManager {
         let main_box = gtk::Box::new(Orientation::Vertical, 5);
         let slider_box = gtk::Box::new(Orientation::Horizontal, 5);
         let controls_box = gtk::Box::new(Orientation::Horizontal, 5);
+        let filter_selector_box = gtk::Box::new(Orientation::Horizontal, 5);
+
+        let filter_list = gtk::StringList::new(FILTER_NAMES);
+        let filter_selector = gtk::DropDown::builder().model(&filter_list).build();
+        filter_selector.set_hexpand(true);
+
+        filter_selector_box.append(&filter_selector);
+
+        main_box.append(&filter_selector_box);
 
         let picture = gtk::Picture::new();
         picture.set_halign(gtk::Align::Center);
@@ -114,6 +130,12 @@ impl WindowManager {
 
         // Volume Toggle
         self.load_volume_button_logic(volume_toggle, &gst_manager);
+
+        // Filter Selector
+        self.load_filter_selector_logic(
+            filter_selector,
+            Rc::new(RefCell::new(gst_manager.clone())),
+        );
 
         // Close
         self.load_close_logic(&window, &gst_manager);
@@ -252,6 +274,34 @@ impl WindowManager {
             volume_element.set_property("volume", new_volume);
             volume_toggle.set_label(if current_mute { " " } else { " " });
             is_muted_clone.set(!current_mute);
+        });
+    }
+
+    fn load_filter_selector_logic(
+        &self,
+        filter_selector: gtk::DropDown,
+        gst_manager: Rc<RefCell<GstreamerManager>>,
+    ) {
+        let gst_manager_clone = gst_manager.clone();
+        filter_selector.connect_selected_item_notify(move |dropdown| {
+            if let Some(item) = dropdown.selected_item() {
+                if let Some(text) = item
+                    .downcast_ref::<gtk::StringObject>()
+                    .map(|obj| obj.string().to_owned())
+                {
+                    if text.eq(NO_FILTER) {
+                        println!("filter: '{}'", text);
+                        gst_manager_clone
+                            .borrow_mut()
+                            .remove_filer_and_continue_pipeline();
+                    } else {
+                        println!("filter: '{}'", text);
+                        gst_manager_clone
+                            .borrow_mut()
+                            .set_filter_and_add_to_pipeline(&text);
+                    }
+                }
+            }
         });
     }
 
