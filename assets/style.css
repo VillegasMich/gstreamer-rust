@@ -73,3 +73,7 @@ label.time {
   color: #000000;
   margin: 0 8px;
 }
+
+.bold-title {
+  font-weight: bold;
+}

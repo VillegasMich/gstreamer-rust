@@ -4,11 +4,13 @@ use std::{
     time::Duration,
 };
 
+use chrono::{DateTime, Utc};
 use gst::prelude::ElementExt;
 use gst_video::prelude::*;
 use gtk::{prelude::*, Application, ApplicationWindow, Button, Orientation, Window};
 
 use crate::{
+    file_metadata::FileMetadata,
     filters::{FILTER_NAMES, NO_FILTER},
     gstreamer::GstreamerManager,
 };
@@ -350,22 +352,120 @@ impl WindowManager {
         main_window: &ApplicationWindow,
         metadata_toggle: gtk::Button,
     ) {
-        // TODO: Add video metadata info
         let main_window_clone = main_window.clone();
         let video_info_window_clone = self.video_info_window.clone();
+        let file_metadata = FileMetadata::new(&self.video_path);
 
         metadata_toggle.connect_clicked(move |_| {
             let mut video_info_window_borrow = video_info_window_clone.borrow_mut();
             if video_info_window_borrow.is_none() {
                 let float_window = Window::builder()
                     .title("Video Info")
-                    .default_width(200)
-                    .default_height(100)
+                    .default_width(414)
+                    .default_height(300)
                     .transient_for(&main_window_clone)
                     .modal(false)
                     .resizable(false)
                     .build();
 
+                let info_box = gtk::Box::new(gtk::Orientation::Vertical, 5);
+                let file_path_box = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+
+                let file_path_title = gtk::Label::new(Some("File path:"));
+                file_path_title.set_css_classes(&["bold-title"]);
+                file_path_title.set_halign(gtk::Align::Center);
+                let file_path_label = gtk::Label::new(file_metadata.path.to_str());
+                file_path_label.set_halign(gtk::Align::Center);
+
+                file_path_box.append(&file_path_title);
+                file_path_box.append(&file_path_label);
+
+                info_box.append(&file_path_box);
+
+                // File size
+                let file_size_box = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+                let file_size_title = gtk::Label::new(Some("File size:"));
+                file_size_title.set_css_classes(&["bold-title"]);
+                file_size_title.set_halign(gtk::Align::Center);
+                let file_size_label =
+                    gtk::Label::new(Some(&format!("{} bytes", file_metadata.metadata.len())));
+                file_size_label.set_halign(gtk::Align::Center);
+                file_size_box.append(&file_size_title);
+                file_size_box.append(&file_size_label);
+                info_box.append(&file_size_box);
+
+                // Creation time
+                if let Ok(created) = file_metadata.metadata.created() {
+                    let creation_time_box = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+                    let creation_time_title = gtk::Label::new(Some("Created:"));
+                    creation_time_title.set_css_classes(&["bold-title"]);
+                    creation_time_title.set_halign(gtk::Align::Center);
+                    let creation_time_label = gtk::Label::new(Some(&format!(
+                        "{}",
+                        DateTime::<Utc>::from(created).format("%Y-%m-%d %H:%M:%S")
+                    )));
+                    creation_time_label.set_halign(gtk::Align::Center);
+                    creation_time_box.append(&creation_time_title);
+                    creation_time_box.append(&creation_time_label);
+                    info_box.append(&creation_time_box);
+                }
+
+                // Last modification time
+                if let Ok(modified) = file_metadata.metadata.modified() {
+                    let modification_time_box = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+                    let modification_time_title = gtk::Label::new(Some("Modified:"));
+                    modification_time_title.set_css_classes(&["bold-title"]);
+                    modification_time_title.set_halign(gtk::Align::Center);
+                    let modification_time_label = gtk::Label::new(Some(&format!(
+                        "{}",
+                        DateTime::<Utc>::from(modified).format("%Y-%m-%d %H:%M:%S")
+                    )));
+                    modification_time_label.set_halign(gtk::Align::Center);
+                    modification_time_box.append(&modification_time_title);
+                    modification_time_box.append(&modification_time_label);
+                    info_box.append(&modification_time_box);
+                }
+
+                // Last access time
+                if let Ok(accessed) = file_metadata.metadata.accessed() {
+                    let access_time_box = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+                    let access_time_title = gtk::Label::new(Some("Accessed:"));
+                    access_time_title.set_css_classes(&["bold-title"]);
+                    access_time_title.set_halign(gtk::Align::Center);
+                    let access_time_label = gtk::Label::new(Some(&format!(
+                        "{}",
+                        DateTime::<Utc>::from(accessed).format("%Y-%m-%d %H:%M:%S")
+                    )));
+                    access_time_label.set_halign(gtk::Align::Center);
+                    access_time_box.append(&access_time_title);
+                    access_time_box.append(&access_time_label);
+                    info_box.append(&access_time_box);
+                }
+
+                // File type
+                let file_type_box = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+                let file_type_title = gtk::Label::new(Some("File type:"));
+                file_type_title.set_css_classes(&["bold-title"]);
+                file_type_title.set_halign(gtk::Align::Center);
+                let file_type = file_metadata.metadata.file_type();
+                let file_type_label_text = if file_type.is_dir() {
+                    "Directory"
+                } else if file_type.is_file() {
+                    "File"
+                } else if file_type.is_symlink() {
+                    "Symbolic Link"
+                } else {
+                    "Unknown"
+                };
+                let file_type_label = gtk::Label::new(Some(file_type_label_text));
+                file_type_label.set_halign(gtk::Align::Center);
+                file_type_box.append(&file_type_title);
+                file_type_box.append(&file_type_label);
+                info_box.append(&file_type_box);
+
+                // TODO: Add more metadata properties
+
+                float_window.set_child(Some(&info_box));
                 float_window.set_visible(true);
                 *video_info_window_borrow = Some(float_window);
             } else if let Some(float_window) = &*video_info_window_borrow {

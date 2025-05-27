@@ -3,6 +3,7 @@ use gtk::prelude::*;
 use gtk::Application;
 use window::WindowManager;
 
+mod file_metadata;
 mod filters;
 mod gstreamer;
 mod window;

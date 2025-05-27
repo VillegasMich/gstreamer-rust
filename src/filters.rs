@@ -11,5 +11,4 @@ pub const FILTER_NAMES: &[&str] = &[
     "twirl",
     "kaleidoscope",
     "tunnel",
-    "frei0r-scanline0r",
 ];

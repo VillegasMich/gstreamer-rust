@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+chrono = "0.4"
 glib = "0.20"
 gtk = { version = "0.9.6", package = "gtk4", features = ["v4_18"] }
 gst = { package = "gstreamer", version = "0.23.6" }
